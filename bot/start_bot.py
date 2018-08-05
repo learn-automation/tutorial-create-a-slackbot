@@ -60,11 +60,66 @@ def is_slack_message(slack_event):
     """
     Returns true if the event type is a message and not a subtype.
     Subtypes are events like a user joining a channel.
-    :param slack_event: SlackClient instance
+    :param slack_event: Dictionary containing Slack event data
     :return: Boolean true if the type is a slack message
     """
-    return slack_event["type"] == "message" and \
-           'subtype' not in slack_event
+    return (slack_event["type"] == "message" and
+            'subtype' not in slack_event)
+
+
+def bot_was_direct_mentioned(sc, slack_event):
+    """
+    Returns true if the message begins with <@{SLACKBOT_ID}>
+    :param sc: SlackClient instance
+    :param slack_event: Dictionary containing Slack event data
+    :return:
+    """
+    return slack_event['text'].startswith(f'<@{get_bot_id(sc)}>')
+
+
+def bot_received_request(_slack_client, s_event):
+    """
+    Returns true if bot was mentioned at the beginning of
+    a message in a channel the bot is in.
+    :param _slack_client: SlackClient instance
+    :param s_event: Dictionary containing Slack event data
+    :return: Boolean true if bot was mentioned and
+             is a member in the channel
+    """
+    if is_slack_message(s_event):
+        if bot_is_present_in_channel(_slack_client, s_event['channel']):
+            if bot_was_direct_mentioned(_slack_client, s_event):
+                return True
+    return False
+
+
+def repeats_message_back_to_user(_slack_client, slack_event):
+    """
+    Repeats the message back to the user
+    :param _slack_client: SlackClient instance
+    :param slack_event: Dictionary containing Slack event data
+    :return: None
+    """
+    post_message_to_channel(_slack_client, slack_event['channel'], slack_event['text'])
+
+
+def post_message_to_channel(sc, channel, message, thread=None, broadcast=None):
+    """
+    Posts message to Slack channel
+    :param sc: SlackClient instance
+    :param channel: String Slack channel id
+    :param message: String message to send
+    :param thread: String Timestamp of thread (event['ts']) or event['thread_ts'])
+    :param broadcast: Boolean broadcasts threaded message to main channel
+    :return: None
+    """
+    sc.api_call(
+        "chat.postMessage",
+        channel=channel,
+        text=message,
+        thread_ts=thread,
+        reply_broadcast=broadcast
+    )
 
 
 def run():
@@ -80,11 +135,8 @@ def run():
         while True:
             print('listening')
             for event in slack_client.rtm_read():
-                if (is_slack_message(event) and
-                        bot_is_present_in_channel(slack_client,
-                                                  event['channel'])
-                ):
-                    print(event['text'])
+                if bot_received_request(slack_client, event):
+                    repeats_message_back_to_user(slack_client, event)
             time.sleep(POLL_INTERVAL)
 
 
