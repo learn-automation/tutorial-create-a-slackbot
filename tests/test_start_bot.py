@@ -17,7 +17,7 @@ def test_bot_is_present_in_channel_happy(monkeypatch):
     mock_channel = {'channel': {'members': {mock_user}}}
     monkeypatch.setattr(start_bot, 'get_channel_info', lambda *args: mock_channel)
     monkeypatch.setattr(start_bot, 'get_bot_id', lambda *args: mock_user)
-    result = start_bot.bot_is_present_in_channel('mock client', mock_channel)
+    result = start_bot.is_bot_is_present_in_channel('mock client', mock_channel)
     assert result is True
 
 
@@ -26,7 +26,7 @@ def test_bot_is_present_in_channel_bot_not_present(monkeypatch):
     mock_channel = {'channel': {'members': 'mothra'}}
     monkeypatch.setattr(start_bot, 'get_channel_info', lambda *args: mock_channel)
     monkeypatch.setattr(start_bot, 'get_bot_id', lambda *args: mock_user)
-    result = start_bot.bot_is_present_in_channel('mock client', mock_channel)
+    result = start_bot.is_bot_is_present_in_channel('mock client', mock_channel)
     assert result is False
 
 

@@ -1,11 +1,16 @@
 """
 Listens for messages in channels where SlackBot is
-a member and prints the message to Stdout
+if somebody says "@OurSlackBot tutorials" in a channel
+with our SlackBot present @OurSlackBot will reply
+with Github repo information if the name of the
+repository starts with tutorial-
 """
 import os
 import time
 
 from slackclient import SlackClient
+
+from bot.github_api_wrapper import GithubApiWrapper
 
 POLL_INTERVAL = 1  # seconds between polling from slack
 
@@ -18,7 +23,49 @@ def initialize_slack_client():
     return SlackClient(os.environ['BOT_TOKEN'])
 
 
-def bot_is_present_in_channel(_slack_client, slack_channel):
+def get_list_of_org_repos():
+    """
+    Grabs repos that belong to the org from Github API.
+    :return: List of tuples containing (name, description, url)
+    """
+    return GithubApiWrapper.get_org_repos()
+
+
+def prepare_repo_message(name, desc, url):
+    """
+    If the repo name starts with 'tutorial-' return a string
+    containing the repo metadata, otherwise returns an empty string
+    :param name: String Repo name
+    :param desc: String Repo description
+    :param url: String Repo html url
+    :return: String containing repo data, or empty string
+    """
+    if name.lower().startswith('tutorial-'):
+        return (f'*{name}* \n>'
+                f'{desc if desc else "Repo has no description"} \n'
+                f' {url}' +
+                '\n'*5)
+    else:
+        return ''
+
+
+def display_org_repos(_slack_client, channel):
+    """
+    Posts a message containing the name, description, and url
+    of repos that belong to the org
+    where the repo name starts with 'tutorial-'
+    :param _slack_client: SlackClient instance
+    :param channel: String ID of Slack channel
+    :return: None
+    """
+    message = f'*{os.environ["GITHUB_ORG"]} repos:*\n'
+    repos = get_list_of_org_repos()
+    for repo in repos:
+        message += prepare_repo_message(*repo)
+    post_message_to_channel(_slack_client, channel, message)
+
+
+def is_bot_is_present_in_channel(_slack_client, slack_channel):
     """
     Checks if bot is a member in the slack_channel.
     :param _slack_client: SlackClient instance
@@ -67,7 +114,7 @@ def is_slack_message(slack_event):
             'subtype' not in slack_event)
 
 
-def bot_was_direct_mentioned(sc, slack_event):
+def was_bot_direct_mentioned(sc, slack_event):
     """
     Returns true if the message begins with <@{SLACKBOT_ID}>
     :param sc: SlackClient instance
@@ -75,6 +122,10 @@ def bot_was_direct_mentioned(sc, slack_event):
     :return:
     """
     return slack_event['text'].startswith(f'<@{get_bot_id(sc)}>')
+
+
+def has_bot_received_request(message_text):
+    return 'tutorials' in message_text.lower()
 
 
 def bot_received_request(_slack_client, s_event):
@@ -87,20 +138,11 @@ def bot_received_request(_slack_client, s_event):
              is a member in the channel
     """
     if is_slack_message(s_event):
-        if bot_is_present_in_channel(_slack_client, s_event['channel']):
-            if bot_was_direct_mentioned(_slack_client, s_event):
-                return True
+        if is_bot_is_present_in_channel(_slack_client, s_event['channel']):
+            if was_bot_direct_mentioned(_slack_client, s_event):
+                if has_bot_received_request(s_event['text']):
+                    return True
     return False
-
-
-def repeats_message_back_to_user(_slack_client, slack_event):
-    """
-    Repeats the message back to the user
-    :param _slack_client: SlackClient instance
-    :param slack_event: Dictionary containing Slack event data
-    :return: None
-    """
-    post_message_to_channel(_slack_client, slack_event['channel'], slack_event['text'])
 
 
 def post_message_to_channel(sc, channel, message, thread=None, broadcast=None):
@@ -136,7 +178,7 @@ def run():
             print('listening')
             for event in slack_client.rtm_read():
                 if bot_received_request(slack_client, event):
-                    repeats_message_back_to_user(slack_client, event)
+                    display_org_repos(slack_client, event['channel'])
             time.sleep(POLL_INTERVAL)
 
 
